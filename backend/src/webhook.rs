@@ -43,7 +43,7 @@ impl WebhookSender {
     }
     
     /// 转发短信
-    pub async fn forward_sms(&self, message: &SmsMessage) -> Result<(), String> {
+    pub async fn forward_sms(&self, message: &SmsMessage, sim_number: &str) -> Result<(), String> {
         let config = self.get_config();
         
         if !config.enabled || !config.forward_sms || config.url.is_empty() {
@@ -51,13 +51,13 @@ impl WebhookSender {
         }
         
         // 使用模板替换变量
-        let payload = render_sms_template(&config.sms_template, message);
+        let payload = render_sms_template(&config.sms_template, message, sim_number);
         
         self.send_webhook_raw(&config, &payload).await
     }
     
     /// 转发通话记录
-    pub async fn forward_call(&self, call: &CallRecord) -> Result<(), String> {
+    pub async fn forward_call(&self, call: &CallRecord, sim_number: &str) -> Result<(), String> {
         let config = self.get_config();
         
         if !config.enabled || !config.forward_calls || config.url.is_empty() {
@@ -65,7 +65,7 @@ impl WebhookSender {
         }
         
         // 使用模板替换变量
-        let payload = render_call_template(&config.call_template, call);
+        let payload = render_call_template(&config.call_template, call, sim_number);
         
         self.send_webhook_raw(&config, &payload).await
     }
@@ -123,7 +123,7 @@ impl WebhookSender {
             pdu: None,
         };
         
-        let payload = render_sms_template(&config.sms_template, &test_message);
+        let payload = render_sms_template(&config.sms_template, &test_message, "+8613800138000");
         
         let mut request = self.client.post(&config.url);
         
@@ -156,8 +156,8 @@ impl WebhookSender {
 }
 
 /// 渲染短信模板，替换变量
-/// 支持的变量：{{id}}, {{phone_number}}, {{content}}, {{direction}}, {{timestamp}}, {{status}}
-fn render_sms_template(template: &str, message: &SmsMessage) -> String {
+/// 支持的变量：{{id}}, {{phone_number}}, {{content}}, {{direction}}, {{timestamp}}, {{status}}, {{sim_number}}
+fn render_sms_template(template: &str, message: &SmsMessage, sim_number: &str) -> String {
     template
         .replace("{{id}}", &message.id.to_string())
         .replace("{{phone_number}}", &message.phone_number)
@@ -165,15 +165,17 @@ fn render_sms_template(template: &str, message: &SmsMessage) -> String {
         .replace("{{direction}}", &message.direction)
         .replace("{{timestamp}}", &message.timestamp)
         .replace("{{status}}", &message.status)
+        .replace("{{sim_number}}", sim_number)
         // 别名支持
         .replace("{{sender}}", &message.phone_number)
         .replace("{{message}}", &escape_json_string(&message.content))
         .replace("{{time}}", &message.timestamp)
+        .replace("{{my_number}}", sim_number)
 }
 
 /// 渲染通话模板，替换变量
-/// 支持的变量：{{id}}, {{phone_number}}, {{direction}}, {{duration}}, {{start_time}}, {{end_time}}, {{answered}}
-fn render_call_template(template: &str, call: &CallRecord) -> String {
+/// 支持的变量：{{id}}, {{phone_number}}, {{direction}}, {{duration}}, {{start_time}}, {{end_time}}, {{answered}}, {{sim_number}}
+fn render_call_template(template: &str, call: &CallRecord, sim_number: &str) -> String {
     let end_time = call.end_time.clone().unwrap_or_default();
     let answered_str = if call.answered { "是" } else { "否" };
     let direction_cn = if call.direction == "incoming" { "来电" } else { "去电" };
@@ -188,9 +190,11 @@ fn render_call_template(template: &str, call: &CallRecord) -> String {
         .replace("{{end_time}}", &end_time)
         .replace("{{answered}}", answered_str)
         .replace("{{answered_bool}}", &call.answered.to_string())
+        .replace("{{sim_number}}", sim_number)
         // 别名支持
         .replace("{{caller}}", &call.phone_number)
         .replace("{{time}}", &call.start_time)
+        .replace("{{my_number}}", sim_number)
 }
 
 /// 转义 JSON 字符串中的特殊字符
