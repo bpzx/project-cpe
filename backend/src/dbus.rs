@@ -1757,6 +1757,29 @@ pub async fn get_sim_slot(conn: &Connection) -> zbus::Result<SimSlotResponse> {
     }).await
 }
 
+/// 获取本机 SIM 卡电话号码（SubscriberNumbers 第一个号码）
+///
+/// # Arguments
+/// * `conn` - D-Bus 连接
+///
+/// # Returns
+/// 本机电话号码，如果无法获取则返回空字符串
+pub async fn get_sim_phone_number(conn: &Connection) -> String {
+    match SimManagerProxy::new(conn).await {
+        Ok(proxy) => match proxy.get_properties().await {
+            Ok(props) => {
+                let numbers: Vec<String> = props
+                    .get("SubscriberNumbers")
+                    .and_then(|v| <Vec<String>>::try_from(v.clone()).ok())
+                    .unwrap_or_default();
+                numbers.first().cloned().unwrap_or_default()
+            }
+            Err(_) => String::new(),
+        },
+        Err(_) => String::new(),
+    }
+}
+
 /// 切换 SIM 卡槽
 pub async fn switch_sim_slot(conn: &Connection, slot: u8) -> zbus::Result<String> {
     with_serial(async {
