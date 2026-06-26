@@ -220,6 +220,10 @@ pub async fn start_sms_listener(conn: Connection, db: Arc<Database>, webhook: Ar
     // Create message stream
     let mut stream = MessageStream::from(&conn);
     
+    // Fetch SIM phone number once (cached for entire listener lifetime)
+    let sim_number = crate::dbus::get_sim_phone_number(&conn).await;
+    let sim_number = Arc::new(sim_number);
+    
     // Listen for signals
     loop {
         let msg = match stream.next().await {
@@ -252,8 +256,9 @@ pub async fn start_sms_listener(conn: Connection, db: Arc<Database>, webhook: Ar
                             pdu: None,
                         };
                         let webhook_clone = Arc::clone(&webhook);
+                        let sim_clone = Arc::clone(&sim_number);
                         tokio::spawn(async move {
-                            let _ = webhook_clone.forward_sms(&sms).await;
+                            let _ = webhook_clone.forward_sms(&sms, &sim_clone).await;
                         });
                     }
                 }
@@ -294,6 +299,10 @@ pub async fn start_call_listener(conn: Connection, db: Arc<Database>, webhook: A
     dbus_proxy.call::<_, _, ()>("AddMatch", &(rule2,)).await?;
     
     let mut stream = MessageStream::from(&conn);
+    
+    // Fetch SIM phone number once (cached for entire listener lifetime)
+    let sim_number = crate::dbus::get_sim_phone_number(&conn).await;
+    let sim_number = Arc::new(sim_number);
     
     loop {
         let msg = match stream.next().await {
@@ -377,8 +386,9 @@ pub async fn start_call_listener(conn: Connection, db: Arc<Database>, webhook: A
                                 answered: call.answered,
                             };
                             let webhook_clone = Arc::clone(&webhook);
+                            let sim_clone = Arc::clone(&sim_number);
                             tokio::spawn(async move {
-                                let _ = webhook_clone.forward_call(&call_record).await;
+                                let _ = webhook_clone.forward_call(&call_record, &sim_clone).await;
                             });
                         }
                     }
